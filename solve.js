@@ -199,6 +199,45 @@ export function run(input) {
 
     recordLineNumber = lineNumber;
     recordIndex = wantsHeader && headerFields === null ? null : outputRows.length;
+
+    // Fast path: a record whose body holds no quote and no CR splits natively.
+    {
+      const eol = findNewline(offset);
+      if (eol >= 0) {
+        const bodyEnd = eol > offset && sourceText.charCodeAt(eol - 1) === 13 ? eol - 1 : eol;
+        const cr = findCarriageReturn(offset);
+        const q = findQuote(offset);
+        if ((cr < 0 || cr >= bodyEnd) && (q < 0 || q >= bodyEnd)) {
+          const fields = sourceText.slice(offset, bodyEnd).split(',');
+          offset = eol + 1;
+          lineNumber++;
+          if (rowWidth < 0) rowWidth = fields.length;
+          if (wantsHeader && headerFields === null) {
+            headerFields = fields;
+            continue;
+          }
+          if (fields.length < rowWidth) {
+            problemList.push({
+              code: 'short_row',
+              line: recordLineNumber,
+              row: recordIndex,
+              fields: fields.length,
+            });
+            for (let i = fields.length; i < rowWidth; i++) fields.push('');
+          } else if (fields.length > rowWidth) {
+            problemList.push({
+              code: 'long_row',
+              line: recordLineNumber,
+              row: recordIndex,
+              extra: fields.splice(rowWidth),
+            });
+          }
+          outputRows.push(fields);
+          continue;
+        }
+      }
+    }
+
     const fields = [];
     let sawQuotedField = false;
     let lastStop = FIELD_COMMA;
