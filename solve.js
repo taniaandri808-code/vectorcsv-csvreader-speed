@@ -12,6 +12,8 @@ const FIELD_END = 2;
 let sourceText, sourceLength, wantsHeader, problemList, outputRows, headerFields;
 let rowWidth, offset, lineNumber, recordLineNumber, recordIndex;
 let crCursor, crExhausted, quoteCursor, quoteExhausted;
+let nlCursor, nlExhausted;
+let commaCursor, commaExhausted;
 
 // Outcome of the most recently parsed field.
 let fieldText, fieldStop, fieldResume;
@@ -41,6 +43,26 @@ function findQuote(from) {
   return quoteCursor;
 }
 
+// Return the next LF at or after `from`, or -1 once none remain.
+function findNewline(from) {
+  if (nlExhausted) return -1;
+  if (nlCursor < from) {
+    nlCursor = sourceText.indexOf('\n', from);
+    if (nlCursor < 0) nlExhausted = true;
+  }
+  return nlCursor;
+}
+
+// Return the next comma at or after `from`, or -1 once none remain.
+function findComma(from) {
+  if (commaExhausted) return -1;
+  if (commaCursor < from) {
+    commaCursor = sourceText.indexOf(',', from);
+    if (commaCursor < 0) commaExhausted = true;
+  }
+  return commaCursor;
+}
+
 // Read an unquoted field beginning at `p`, optionally prepending `prefix`.
 // The field ends at a comma, newline, CRLF, or end of input. A lone CR is
 // discarded and reported as stray_cr. Results go into fieldText/fieldStop/fieldResume.
@@ -52,11 +74,11 @@ function readField(p, prefix) {
     let stopIndex = -1;
     let stopKind = 0;
 
-    const commaAt = sourceText.indexOf(',', p);
+    const commaAt = findComma(p);
     stopIndex = commaAt;
     stopKind = 0;
 
-    const newlineAt = sourceText.indexOf('\n', p);
+    const newlineAt = findNewline(p);
     if (newlineAt >= 0 && (stopIndex < 0 || newlineAt < stopIndex)) {
       stopIndex = newlineAt;
       stopKind = 1;
@@ -149,6 +171,10 @@ export function run(input) {
   crExhausted = false;
   quoteCursor = -1;
   quoteExhausted = false;
+  nlCursor = -1;
+  nlExhausted = false;
+  commaCursor = -1;
+  commaExhausted = false;
   fieldText = '';
   fieldStop = FIELD_END;
   fieldResume = sourceLength;
@@ -214,6 +240,10 @@ export function run(input) {
           crExhausted = false; // force findCarriageReturn(offset) to rescan
           quoteCursor = openingQuote - 1;
           quoteExhausted = false;
+          nlCursor = openingQuote - 1;
+          nlExhausted = false;
+          commaCursor = openingQuote - 1;
+          commaExhausted = false;
           readField(offset, '"');
           fields.push(fieldText);
           lastStop = fieldStop;
